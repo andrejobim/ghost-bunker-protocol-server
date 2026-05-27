@@ -8,6 +8,11 @@ audit**, and the Privacy-Max profile it tries to apply is best-effort, not a gua
 
 Do not use this software for sensitive production communications.
 
+Future cryptographic work (X25519, Ed25519, Double Ratchet, and related topics) is
+**documented only** in [`docs/crypto-roadmap.md`](docs/crypto-roadmap.md) and must not
+be treated as implemented or reviewed until an independent audit completes. See
+[`docs/releases/v1.0-protocol-cryptographic-review.md`](docs/releases/v1.0-protocol-cryptographic-review.md).
+
 ## Supported versions
 
 Only the current development line of `main` (versioned `0.1.0-SNAPSHOT`) is supported.

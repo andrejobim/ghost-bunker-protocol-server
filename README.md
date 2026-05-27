@@ -280,6 +280,14 @@ fuller version.
   manual clients.
 - [`docs/production-readiness-plan.md`](docs/production-readiness-plan.md) —
   what is missing before this could responsibly be called production-ready.
+- [`docs/threat-model.md`](docs/threat-model.md) —
+  adversaries, goals, and what v0.x does not defend against (draft).
+- [`docs/crypto-roadmap.md`](docs/crypto-roadmap.md) —
+  evaluation of X25519, Ed25519, Double Ratchet, and audit gates (no v0.x implementation).
+- [`docs/protocol-migration-plan.md`](docs/protocol-migration-plan.md) —
+  versioned compatibility and migration rules before any v1.0 wire change.
+- [`docs/releases/v1.0-protocol-cryptographic-review.md`](docs/releases/v1.0-protocol-cryptographic-review.md) —
+  cryptographic review milestone (documentation only; no security tag).
 - [`docs/privacy-audit.md`](docs/privacy-audit.md) —
   historical privacy audit notes kept for reference; **not** an authoritative
   description of the current code.

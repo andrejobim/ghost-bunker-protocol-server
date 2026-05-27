@@ -81,12 +81,11 @@ real users.
 - **Per-room counters**. The fan-out loop opens and closes sessions implicitly via
   `recipient.isOpen()`. Adding a sanitized aggregate counter ("connections currently
   in room X = N") would help operators without identifying any user.
-- **Documented threat model**. A short, honest threat-model document that names the
-  threats the project does not defend against (network-level traffic analysis,
-  compromised clients, malicious operators, intermediate-proxy logging, kernel-side
-  packet capture) and the ones it does (server-side persistence of plaintext or
-  identity, accidental log leakage, oversize-frame DoS, single-client message
-  flooding).
+- **Documented threat model (DRAFT)**. See [`docs/threat-model.md`](threat-model.md).
+  It must still be reviewed and updated by qualified cryptographers before any v1.0
+  security claim. Related: [`docs/crypto-roadmap.md`](crypto-roadmap.md),
+  [`docs/protocol-migration-plan.md`](protocol-migration-plan.md),
+  [`docs/releases/v1.0-protocol-cryptographic-review.md`](releases/v1.0-protocol-cryptographic-review.md).
 
 ---
 
