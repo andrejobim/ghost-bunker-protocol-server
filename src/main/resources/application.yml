@@ -1,0 +1,29 @@
+server:
+  port: 8080
+  # Privacy-Max: Tomcat access logs are explicitly disabled so the embedded servlet
+  # container does not write per-request lines containing the client IP, request URI,
+  # User-Agent, or the time of every WebSocket upgrade. This is also Spring Boot's
+  # default — pinning it here documents the contract and lets PrivacyLoggingConfigurationTest
+  # assert the effective value at startup.
+  tomcat:
+    accesslog:
+      enabled: false
+
+spring:
+  main:
+    banner-mode: "off"
+
+# Privacy-Max: identifiable third-party logging is quieted to WARN. The application's
+# own log lines go through SanitizedProtocolLogger and remain at INFO. Lowering Tomcat,
+# Coyote, or Spring's WebSocket categories to INFO/DEBUG/TRACE would re-introduce
+# transport-layer details (remote address, session uri, connection upgrade chatter)
+# that the application code itself never emits. PrivacyLoggingConfigurationTest pins
+# this contract.
+logging:
+  level:
+    root: INFO
+    org.apache.tomcat: WARN
+    org.apache.coyote: WARN
+    org.springframework.web: WARN
+    org.springframework.web.socket: WARN
+

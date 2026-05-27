@@ -1,0 +1,23 @@
+# Build output
+target/
+
+# Logs
+*.log
+logs/
+
+# Environment / secrets — never commit
+.env
+.env.*
+
+# Keys / certificates — never commit
+*.pem
+*.key
+*.p12
+*.jks
+
+# IDEs
+.idea/
+*.iml
+
+# OS
+.DS_Store
