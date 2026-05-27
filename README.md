@@ -99,12 +99,17 @@ Run the server:
 mvn spring-boot:run
 ```
 
-By default the server listens on `ws://localhost:8080/ghost-bunker`. The port is set in
-`src/main/resources/application.yml` (`server.port=8080`).
+By default the server listens on `ws://localhost:8080/ghost-bunker` (application port
+**8080**). The port is set in `src/main/resources/application.yml` (`server.port=8080`).
+
+For staging or production behind a reverse proxy, clients use `wss://<host>/ghost-bunker`,
+terminate TLS at the proxy, activate the `prod` profile, set
+`GHOSTBUNKER_WEBSOCKET_ALLOWED_ORIGINS`, and require WebSocket subprotocol
+`ghost-bunker.v0.1`. Management endpoints move to port **8081** in `prod`. See
+[`docs/reverse-proxy-deployment.md`](docs/reverse-proxy-deployment.md).
 
 Allowed origins are configurable via `ghostbunker.websocket.allowed-origins` (default
-`*` in `application.yml`). For staging, use the `prod` profile and set explicit HTTPS
-origins — see [`docs/reverse-proxy-deployment.md`](docs/reverse-proxy-deployment.md).
+`*` in `application.yml`; empty list in `application-prod.yml` until configured).
 
 ### Staging (Docker)
 
@@ -210,8 +215,8 @@ the reference server tries to enforce:
   field, no User-Agent field. The `.proto` reserves these omissions explicitly.
 - Application logs are produced only through `SanitizedProtocolLogger` with constant
   sanitized messages (`"ws connected (sanitized)"`, `"ws closed (sanitized)"`, etc.).
-  `ErrorMessage.message` content is trimmed to 160 characters and intended to be a
-  short sanitized string with no payload, IP, header, or secret.
+  `ErrorMessage.message` is generated from a canonical 
+  `ErrorCode -> message` table and never from caller-provided client input.
 
 What Privacy-Max **does not** promise:
 
@@ -228,11 +233,11 @@ What Privacy-Max **does not** promise:
 
 - Single-node only. There is no distributed state, no broker, no cross-instance fan-out.
 - All session and room state is in-memory and is lost on restart.
-- The WebSocket endpoint accepts all origins (`*`). This is appropriate for local
-  development only.
+- Without the `prod` profile, the WebSocket endpoint accepts all origins (`*`).
+  Staging must use `prod` and explicit HTTPS origins.
 - There is no transport encryption configured by the application itself; `ws://` is
-  used in development. Production deployments must terminate TLS in front of (or
-  inside) the server.
+  for local development only. Staging and production use `wss://` with TLS terminated
+  at the reverse proxy or edge (see `docs/reverse-proxy-deployment.md`).
 - No persistent identity, no message delivery guarantees, no offline delivery, no
   receipts other than the optional `MESSAGE_RECEIVED_ACK` from the receiving client.
 - Heartbeat, idle, and pong timeouts are global per connection and cannot be
@@ -248,9 +253,7 @@ This is a non-binding outline of work the reference implementation may pick up n
 See [`docs/production-readiness-plan.md`](docs/production-readiness-plan.md) for the
 fuller version.
 
-- **Hardening**: tighten allowed origins, document a TLS termination story, add
-  configuration for binding interface, add a structured shutdown hook that sends
-  `GOODBYE` with reason `SERVER_SHUTDOWN`.
+- **Hardening**: network policy around bind address, proxy log audits in real staging.
 - **Web reference client**: a minimal browser client that performs PBKDF2-based key
   derivation and AES-256-GCM encryption matching `CIPHER_SUITE = 1`.
 - **Staging environment**: a deployment that exercises the protocol behind a real
@@ -278,6 +281,8 @@ fuller version.
 - [`docs/manual-testing.md`](docs/manual-testing.md) —
   how to run the server locally and exercise it with `wscat` and with the bundled
   manual clients.
+- [`docs/reverse-proxy-deployment.md`](docs/reverse-proxy-deployment.md) —
+  staging behind nginx/Caddy: ports, `wss://`, origins, subprotocol, access logs.
 - [`docs/production-readiness-plan.md`](docs/production-readiness-plan.md) —
   what is missing before this could responsibly be called production-ready.
 - [`docs/threat-model.md`](docs/threat-model.md) —

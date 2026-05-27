@@ -17,23 +17,24 @@ and security audit** before any non-experimental release.
 Before discussing readiness for anyone other than the protocol's authors, the current
 code should be cleaned up to match its claims.
 
-- **Allowed origins**. `WebSocketConfig.registerWebSocketHandlers` currently calls
-  `setAllowedOrigins("*")`. This must become a configurable list of trusted origins
-  (or an explicit empty list when TLS termination already enforces origin checks).
-- **TLS**. `application.yml` does not configure TLS. The reference server expects to
-  run behind a TLS terminator. The README and deployment documentation must spell
-  out the exact contract (which proxy, what TLS versions, what cipher suites, how
-  the proxy forwards the WebSocket upgrade), and the development-mode `ws://` must
-  remain clearly labeled as development-only.
-- **Bind address**. The server today listens on all interfaces (Spring Boot's
-  default). The configuration should make explicit which interface the application
-  binds to.
-- **Shutdown**. There is no graceful-shutdown hook today that walks open sessions
-  and sends `GOODBYE` with reason `SERVER_SHUTDOWN`. Adding one is straightforward
-  via a Spring `@PreDestroy` on `GhostBunkerWebSocketHandler` or a `SmartLifecycle`
-  bean, and it would make rolling restarts visible to clients.
-- **Default logger levels**. `application.yml` pins the third-party categories that
-  can emit identifiable transport-layer details to WARN:
+- **Allowed origins (DONE)**. `ghostbunker.websocket.allowed-origins` is configurable;
+  `WebSocketConfig` passes the list to `setAllowedOrigins`. Development defaults to
+  `*` in `application.yml`; the `prod` profile defaults to an empty list until
+  `GHOSTBUNKER_WEBSOCKET_ALLOWED_ORIGINS` is set. Staging operators must still
+  choose origins that match their deployed web client.
+- **TLS (documented, not in-JVM)**. `application.yml` does not configure TLS. The
+  reference server expects TLS termination at a reverse proxy or edge. See
+  [`docs/reverse-proxy-deployment.md`](reverse-proxy-deployment.md) for ports
+  (`8080` / `8081`), `wss://<host>/ghost-bunker`, WebSocket upgrade requirements,
+  and proxy access-log policy. Development `ws://localhost:8080/ghost-bunker` remains
+  local-only.
+- **Bind address (partial)**. `application-prod.yml` sets `server.address: 0.0.0.0`
+  for container use; reachability should still be restricted with network policy so
+  only the proxy can reach `8080` and only monitoring can reach `8081`.
+- **Shutdown (DONE)**. `GracefulShutdownService` broadcasts `GOODBYE` with reason
+  `SERVER_SHUTDOWN` before exit; covered by `ProductionHardeningIT`.
+- **Default logger levels (DONE)**. `application.yml` pins the third-party categories
+  that can emit identifiable transport-layer details to WARN:
   `org.apache.tomcat: WARN`, `org.apache.coyote: WARN`,
   `org.springframework.web: WARN`, `org.springframework.web.socket: WARN`. The root
   logger stays at INFO. `server.tomcat.accesslog.enabled` is explicitly set to
@@ -49,8 +50,9 @@ code should be cleaned up to match its claims.
 These are concrete safety measures the reference server should grow before reaching
 real users.
 
-- **Configurable allowed origins** (Phase 1) plus optional **subprotocol negotiation**
-  enforcement at the WebSocket layer (e.g. requiring `ghost-bunker.v0.1`).
+- **Subprotocol enforcement in all non-dev deploys**. The `prod` profile requires
+  `ghost-bunker.v0.1`; confirm every staging client and load tool sends
+  `Sec-WebSocket-Protocol` (see `ProductionHardeningIT`).
 - **Stricter input bounds**. The current validator covers obvious cases. Additional
   hardening:
   - Apply a maximum length to `Hello.client_name` (currently unbounded other than
@@ -116,12 +118,15 @@ Before talking to real users, the reference server should be deployed to a stagi
 environment that exercises the full network path it expects in production:
 
 - Real DNS, real TLS certificates, no localhost shortcuts.
-- A real reverse proxy in front (e.g. nginx or Caddy) configured for WebSocket
-  upgrade, with access logs explicitly disabled and verified.
+- Deploy per [`docs/reverse-proxy-deployment.md`](reverse-proxy-deployment.md):
+  `wss://<host>/ghost-bunker`, application port **8080**, management port **8081**
+  internal-only, `SPRING_PROFILES_ACTIVE=prod`, explicit allowed origins, subprotocol
+  `ghost-bunker.v0.1`, reverse proxy with WebSocket upgrade and **no** access logs
+  that record IP, URI, body, or ciphertext.
 - Real kernel-level firewall/connection-tracking configuration documented end to
   end, with an explicit statement of which logs the OS retains and for how long.
 - Synthetic test load using the reference web client to confirm the protocol works
-  through the proxy, not just on `ws://localhost:8080`.
+  through the proxy, not just on `ws://localhost:8080/ghost-bunker`.
 - Repeat the Privacy-Max log audit against the staging deployment with actual log
   collection enabled: capture all logs from the application, the proxy, and the OS,
   and confirm none of them contain forbidden substrings.
