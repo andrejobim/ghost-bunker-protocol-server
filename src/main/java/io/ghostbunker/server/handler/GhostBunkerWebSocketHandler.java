@@ -11,20 +11,22 @@ import io.ghostbunker.protocol.v1.MessageAccepted;
 import io.ghostbunker.protocol.v1.MessageType;
 import io.ghostbunker.protocol.v1.Pong;
 import io.ghostbunker.protocol.v1.RoomJoined;
-import io.ghostbunker.server.backpressure.OutboundQueuePolicy;
+import io.ghostbunker.server.backpressure.BackpressurePolicy;
+import io.ghostbunker.server.bus.MessageBus;
 import io.ghostbunker.server.error.ProtocolErrorMapper;
 import io.ghostbunker.server.heartbeat.HeartbeatService;
 import io.ghostbunker.server.logging.SanitizedProtocolLogger;
 import io.ghostbunker.server.observability.GhostBunkerMetrics;
+import io.ghostbunker.server.presence.PresenceRegistry;
 import io.ghostbunker.server.protocol.GhostEnvelopeDecoder;
 import io.ghostbunker.server.protocol.GhostEnvelopeEncoder;
 import io.ghostbunker.server.protocol.ProtocolLimits;
-import io.ghostbunker.server.rate.PerConnectionRateLimiter;
-import io.ghostbunker.server.room.InMemoryRoomRegistry;
+import io.ghostbunker.server.rate.RateLimitStore;
+import io.ghostbunker.server.room.RoomRegistry;
 import io.ghostbunker.server.routing.MessageRouter;
 import io.ghostbunker.server.session.GhostSession;
 import io.ghostbunker.server.session.GhostSessionState;
-import io.ghostbunker.server.session.InMemoryGhostSessionRegistry;
+import io.ghostbunker.server.session.SessionRegistry;
 import io.ghostbunker.server.validation.ProtocolValidator;
 import io.ghostbunker.server.validation.ProtocolValidator.ValidationException;
 import org.springframework.stereotype.Component;
@@ -41,11 +43,13 @@ import java.util.UUID;
 
 @Component
 public class GhostBunkerWebSocketHandler extends BinaryWebSocketHandler {
-  private final InMemoryGhostSessionRegistry sessionRegistry;
-  private final InMemoryRoomRegistry roomRegistry;
+  private final SessionRegistry sessionRegistry;
+  private final RoomRegistry roomRegistry;
+  private final PresenceRegistry presenceRegistry;
   private final MessageRouter router;
+  private final MessageBus messageBus;
   private final ProtocolValidator validator;
-  private final PerConnectionRateLimiter rateLimiter;
+  private final RateLimitStore rateLimitStore;
   private final ProtocolErrorMapper errorMapper;
   private final HeartbeatService heartbeatService;
   private final SanitizedProtocolLogger logger;
@@ -54,34 +58,39 @@ public class GhostBunkerWebSocketHandler extends BinaryWebSocketHandler {
 
   private final GhostEnvelopeDecoder decoder;
   private final GhostEnvelopeEncoder encoder;
-  private final OutboundQueuePolicy outboundPolicy;
+  private final BackpressurePolicy backpressurePolicy;
   private final Clock clock = Clock.systemUTC();
 
   public GhostBunkerWebSocketHandler(
-      InMemoryGhostSessionRegistry sessionRegistry,
-      InMemoryRoomRegistry roomRegistry,
+      SessionRegistry sessionRegistry,
+      RoomRegistry roomRegistry,
+      PresenceRegistry presenceRegistry,
       MessageRouter router,
+      MessageBus messageBus,
       ProtocolValidator validator,
-      PerConnectionRateLimiter rateLimiter,
+      RateLimitStore rateLimitStore,
       ProtocolErrorMapper errorMapper,
       HeartbeatService heartbeatService,
       SanitizedProtocolLogger logger,
       ProtocolLimits limits,
-      GhostBunkerMetrics metrics
+      GhostBunkerMetrics metrics,
+      BackpressurePolicy backpressurePolicy
   ) {
     this.sessionRegistry = sessionRegistry;
     this.roomRegistry = roomRegistry;
+    this.presenceRegistry = presenceRegistry;
     this.router = router;
+    this.messageBus = messageBus;
     this.validator = validator;
-    this.rateLimiter = rateLimiter;
+    this.rateLimitStore = rateLimitStore;
     this.errorMapper = errorMapper;
     this.heartbeatService = heartbeatService;
     this.logger = logger;
     this.limits = limits;
     this.metrics = metrics;
+    this.backpressurePolicy = backpressurePolicy;
     this.decoder = new GhostEnvelopeDecoder(limits);
     this.encoder = new GhostEnvelopeEncoder(limits);
-    this.outboundPolicy = new OutboundQueuePolicy(limits);
   }
 
   @Override
@@ -108,7 +117,7 @@ public class GhostBunkerWebSocketHandler extends BinaryWebSocketHandler {
 
     session.touchActivity();
 
-    if (!rateLimiter.allowCommand(session)) {
+    if (!rateLimitStore.allowCommand(session)) {
       sendError(session, ErrorCode.RATE_LIMITED_CONNECTION, "rate limited", null, 1_000);
       return;
     }
@@ -233,7 +242,7 @@ public class GhostBunkerWebSocketHandler extends BinaryWebSocketHandler {
     session.rooms().add(roomId);
     session.setState(GhostSessionState.IN_ROOMS);
 
-    int onlineCount = roomRegistry.get(roomId).map(r -> r.onlineCount()).orElse(1);
+    int onlineCount = Math.max(1, presenceRegistry.onlineCount(roomId));
     GhostEnvelope roomJoined = GhostEnvelope.newBuilder()
         .setProtocol(limits.expectedProtocol())
         .setVersion(limits.expectedVersion())
@@ -266,7 +275,7 @@ public class GhostBunkerWebSocketHandler extends BinaryWebSocketHandler {
       return;
     }
 
-    if (!rateLimiter.allowMessage(session)) {
+    if (!rateLimitStore.allowMessage(session)) {
       sendError(session, ErrorCode.RATE_LIMITED_CONNECTION, "rate limited", env.getRequestId(), 1_000);
       return;
     }
@@ -321,6 +330,7 @@ public class GhostBunkerWebSocketHandler extends BinaryWebSocketHandler {
         .build();
 
     byte[] routedBytes = encoder.encode(routedEnv);
+    messageBus.publish(roomId, routedBytes);
     for (WebSocketSession recipient : router.recipientsExcludingSender(roomId, session.wsSession())) {
       if (!recipient.isOpen()) continue;
       GhostSession recipientGs = sessionRegistry.get(recipient).orElse(null);
@@ -375,7 +385,7 @@ public class GhostBunkerWebSocketHandler extends BinaryWebSocketHandler {
   }
 
   private boolean send(GhostSession session, GhostEnvelope env, byte[] bytes) throws IOException {
-    if (!outboundPolicy.canEnqueue(session, bytes.length)) {
+    if (!backpressurePolicy.canEnqueue(session, bytes.length)) {
       return false;
     }
     session.onEnqueueOutbound(bytes.length);

@@ -12,26 +12,23 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Component
-public class InMemoryGhostSessionRegistry {
+public class InMemorySessionRegistry implements SessionRegistry {
   private final Map<String, GhostSession> sessionsByWsId = new ConcurrentHashMap<>();
   private final Clock clock;
   private final ProtocolLimits limits;
 
   @Autowired
-  public InMemoryGhostSessionRegistry(ProtocolLimits limits) {
+  public InMemorySessionRegistry(ProtocolLimits limits) {
     this.clock = Clock.systemUTC();
     this.limits = limits;
   }
 
-  public InMemoryGhostSessionRegistry(Clock clock, ProtocolLimits limits) {
+  public InMemorySessionRegistry(Clock clock, ProtocolLimits limits) {
     this.clock = clock;
     this.limits = limits;
   }
 
-  public GhostSession create(WebSocketSession wsSession) {
-    return create(wsSession, wsSession);
-  }
-
+  @Override
   public GhostSession create(WebSocketSession decoratedWsSession, WebSocketSession rawWsSession) {
     String sessionId = UUID.randomUUID().toString();
     String userId = UUID.randomUUID().toString();
@@ -49,21 +46,23 @@ public class InMemoryGhostSessionRegistry {
     return session;
   }
 
+  @Override
   public Optional<GhostSession> get(WebSocketSession wsSession) {
     return Optional.ofNullable(sessionsByWsId.get(wsSession.getId()));
   }
 
+  @Override
   public void remove(WebSocketSession wsSession) {
     sessionsByWsId.remove(wsSession.getId());
   }
 
-  /** Immutable snapshot of live sessions (for graceful shutdown). */
+  @Override
   public java.util.Collection<GhostSession> snapshot() {
     return java.util.List.copyOf(sessionsByWsId.values());
   }
 
+  @Override
   public int activeCount() {
     return sessionsByWsId.size();
   }
 }
-

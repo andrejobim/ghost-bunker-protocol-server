@@ -13,7 +13,7 @@
 
   <groupId>io.ghostbunker</groupId>
   <artifactId>ghost-bunker-protocol-server</artifactId>
-  <version>0.3.0-SNAPSHOT</version>
+  <version>0.4.0-SNAPSHOT</version>
   <name>ghost-bunker-protocol-server</name>
   <description>WebSocket server for Ghost Bunker Protocol v0.1</description>
 

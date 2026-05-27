@@ -1,37 +1,17 @@
 package io.ghostbunker.server.routing;
 
 import io.ghostbunker.protocol.v1.GhostEnvelope;
-import io.ghostbunker.server.room.InMemoryRoomRegistry;
-import org.springframework.stereotype.Component;
 import org.springframework.web.socket.WebSocketSession;
 
-import java.util.ArrayList;
 import java.util.List;
 
-@Component
-public class MessageRouter {
-  private final InMemoryRoomRegistry roomRegistry;
+/**
+ * Resolves local delivery targets for an envelope. In a multi-node deployment, remote recipients
+ * are reached via {@link io.ghostbunker.server.bus.MessageBus} instead of this registry alone.
+ */
+public interface MessageRouter {
 
-  public MessageRouter(InMemoryRoomRegistry roomRegistry) {
-    this.roomRegistry = roomRegistry;
-  }
+  List<WebSocketSession> recipientsExcludingSender(String roomId, WebSocketSession sender);
 
-  public List<WebSocketSession> recipientsExcludingSender(String roomId, WebSocketSession sender) {
-    return roomRegistry.get(roomId)
-        .map(room -> {
-          List<WebSocketSession> out = new ArrayList<>();
-          for (WebSocketSession ws : room.participants()) {
-            if (!ws.getId().equals(sender.getId())) {
-              out.add(ws);
-            }
-          }
-          return out;
-        })
-        .orElseGet(List::of);
-  }
-
-  public String routeScope(GhostEnvelope env) {
-    return env.getRoomId();
-  }
+  String routeScope(GhostEnvelope env);
 }
-

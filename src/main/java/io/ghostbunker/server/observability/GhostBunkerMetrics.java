@@ -2,7 +2,7 @@ package io.ghostbunker.server.observability;
 
 import io.ghostbunker.protocol.v1.DisconnectReason;
 import io.ghostbunker.protocol.v1.ErrorCode;
-import io.ghostbunker.server.room.InMemoryRoomRegistry;
+import io.ghostbunker.server.room.RoomRegistry;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -25,11 +25,11 @@ public class GhostBunkerMetrics {
   private final Counter slowClientCloses;
   private final Map<ErrorCode, Counter> errorsByCode;
   private final Map<DisconnectReason, Counter> goodbyeByReason;
-  private final InMemoryRoomRegistry roomRegistry;
+  private final RoomRegistry roomRegistry;
 
   public GhostBunkerMetrics(
       MeterRegistry registry,
-      InMemoryRoomRegistry roomRegistry
+      RoomRegistry roomRegistry
   ) {
     this.roomRegistry = roomRegistry;
 
@@ -48,7 +48,7 @@ public class GhostBunkerMetrics {
     slowClientCloses = Counter.builder("ghostbunker.connections.slow_client_closed")
         .description("Connections closed because outbound backpressure was exceeded")
         .register(registry);
-    Gauge.builder("ghostbunker.rooms.active", roomRegistry, InMemoryRoomRegistry::activeRoomCount)
+    Gauge.builder("ghostbunker.rooms.active", roomRegistry, RoomRegistry::activeRoomCount)
         .description("Rooms with at least one connected participant")
         .register(registry);
 

@@ -50,11 +50,11 @@ The following are considered in scope for security and privacy reports:
   enforces over `GhostSessionState`.
 - The heartbeat, handshake-timeout, and graceful-disconnect logic in
   `HeartbeatService`.
-- The in-memory session and room registries (`InMemoryGhostSessionRegistry`,
+- The in-memory session and room registries (`InMemorySessionRegistry`,
   `InMemoryRoomRegistry`, `Room`).
-- The per-connection rate limiter (`PerConnectionRateLimiter`, `GhostSession`'s
+- The per-connection rate limiter (`InMemoryRateLimitStore`, `GhostSession`'s
   sliding-window counters) and outbound back-pressure policy
-  (`OutboundQueuePolicy`).
+  (`DefaultBackpressurePolicy`).
 - The sanitized error mapper (`ProtocolErrorMapper`) and sanitized logger
   (`SanitizedProtocolLogger`).
 - Anything that would cause the server to leak, persist, or transmit information the

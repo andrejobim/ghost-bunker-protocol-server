@@ -8,21 +8,25 @@ import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Component
-public class InMemoryRoomRegistry {
+public class InMemoryRoomRegistry implements RoomRegistry {
   private final Map<String, Room> rooms = new ConcurrentHashMap<>();
 
+  @Override
   public Room getOrCreate(String roomId) {
     return rooms.computeIfAbsent(roomId, Room::new);
   }
 
+  @Override
   public Optional<Room> get(String roomId) {
     return Optional.ofNullable(rooms.get(roomId));
   }
 
+  @Override
   public void join(String roomId, WebSocketSession session) {
     getOrCreate(roomId).add(session);
   }
 
+  @Override
   public void leave(String roomId, WebSocketSession session) {
     Room room = rooms.get(roomId);
     if (room == null) return;
@@ -32,6 +36,7 @@ public class InMemoryRoomRegistry {
     }
   }
 
+  @Override
   public void leaveAll(WebSocketSession session) {
     for (Room room : rooms.values()) {
       room.removeById(session.getId());
@@ -39,6 +44,7 @@ public class InMemoryRoomRegistry {
     rooms.entrySet().removeIf(e -> e.getValue().isEmpty());
   }
 
+  @Override
   public int activeRoomCount() {
     return rooms.size();
   }

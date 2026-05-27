@@ -5,7 +5,7 @@ import io.ghostbunker.server.config.GhostBunkerProperties;
 import io.ghostbunker.server.heartbeat.HeartbeatService;
 import io.ghostbunker.server.logging.SanitizedProtocolLogger;
 import io.ghostbunker.server.session.GhostSession;
-import io.ghostbunker.server.session.InMemoryGhostSessionRegistry;
+import io.ghostbunker.server.session.SessionRegistry;
 import jakarta.annotation.PreDestroy;
 import org.springframework.stereotype.Component;
 
@@ -18,13 +18,13 @@ import java.util.List;
  */
 @Component
 public class GracefulShutdownService {
-  private final InMemoryGhostSessionRegistry sessionRegistry;
+  private final SessionRegistry sessionRegistry;
   private final HeartbeatService heartbeatService;
   private final GhostBunkerProperties properties;
   private final SanitizedProtocolLogger logger;
 
   public GracefulShutdownService(
-      InMemoryGhostSessionRegistry sessionRegistry,
+      SessionRegistry sessionRegistry,
       HeartbeatService heartbeatService,
       GhostBunkerProperties properties,
       SanitizedProtocolLogger logger
