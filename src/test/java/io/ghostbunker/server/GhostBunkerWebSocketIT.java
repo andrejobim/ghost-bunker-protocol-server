@@ -151,7 +151,7 @@ class GhostBunkerWebSocketIT {
 
     GhostEnvelope goodbye = awaitType(c, MessageType.GOODBYE, 2_000);
     assertThat(goodbye.getGoodbye().getReason().name()).isEqualTo("PROTOCOL_ERROR");
-    assertThat(goodbye.getGoodbye().getMessage()).isEqualTo("handshake timeout");
+    assertThat(goodbye.getGoodbye().getMessage()).isEqualTo("protocol error");
 
     c.awaitClose(2_000);
   }

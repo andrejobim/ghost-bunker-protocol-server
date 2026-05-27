@@ -15,6 +15,7 @@ import io.ghostbunker.server.backpressure.OutboundQueuePolicy;
 import io.ghostbunker.server.error.ProtocolErrorMapper;
 import io.ghostbunker.server.heartbeat.HeartbeatService;
 import io.ghostbunker.server.logging.SanitizedProtocolLogger;
+import io.ghostbunker.server.observability.GhostBunkerMetrics;
 import io.ghostbunker.server.protocol.GhostEnvelopeDecoder;
 import io.ghostbunker.server.protocol.GhostEnvelopeEncoder;
 import io.ghostbunker.server.protocol.ProtocolLimits;
@@ -49,6 +50,7 @@ public class GhostBunkerWebSocketHandler extends BinaryWebSocketHandler {
   private final HeartbeatService heartbeatService;
   private final SanitizedProtocolLogger logger;
   private final ProtocolLimits limits;
+  private final GhostBunkerMetrics metrics;
 
   private final GhostEnvelopeDecoder decoder;
   private final GhostEnvelopeEncoder encoder;
@@ -64,7 +66,8 @@ public class GhostBunkerWebSocketHandler extends BinaryWebSocketHandler {
       ProtocolErrorMapper errorMapper,
       HeartbeatService heartbeatService,
       SanitizedProtocolLogger logger,
-      ProtocolLimits limits
+      ProtocolLimits limits,
+      GhostBunkerMetrics metrics
   ) {
     this.sessionRegistry = sessionRegistry;
     this.roomRegistry = roomRegistry;
@@ -75,6 +78,7 @@ public class GhostBunkerWebSocketHandler extends BinaryWebSocketHandler {
     this.heartbeatService = heartbeatService;
     this.logger = logger;
     this.limits = limits;
+    this.metrics = metrics;
     this.decoder = new GhostEnvelopeDecoder(limits);
     this.encoder = new GhostEnvelopeEncoder(limits);
     this.outboundPolicy = new OutboundQueuePolicy(limits);
@@ -90,6 +94,7 @@ public class GhostBunkerWebSocketHandler extends BinaryWebSocketHandler {
     GhostSession gs = sessionRegistry.create(decorated, session);
     gs.setState(GhostSessionState.AWAITING_HELLO);
     heartbeatService.start(gs);
+    metrics.onConnectionOpened();
     logger.info("ws connected (sanitized)");
   }
 
@@ -115,7 +120,7 @@ public class GhostBunkerWebSocketHandler extends BinaryWebSocketHandler {
     } catch (InvalidProtocolBufferException e) {
       // Bad protobuf is a hard failure: emit a sanitized ERROR and close.
       sendError(session, ErrorCode.BAD_ENVELOPE, "invalid protobuf", null, null);
-      heartbeatService.closeWithGoodbye(session, DisconnectReason.PROTOCOL_ERROR, "invalid protobuf");
+      heartbeatService.closeWithGoodbye(session, DisconnectReason.PROTOCOL_ERROR);
       return;
     }
 
@@ -315,12 +320,15 @@ public class GhostBunkerWebSocketHandler extends BinaryWebSocketHandler {
         .setEncryptedMessage(routed)
         .build();
 
+    byte[] routedBytes = encoder.encode(routedEnv);
     for (WebSocketSession recipient : router.recipientsExcludingSender(roomId, session.wsSession())) {
       if (!recipient.isOpen()) continue;
       GhostSession recipientGs = sessionRegistry.get(recipient).orElse(null);
       if (recipientGs == null) continue;
-      if (!send(recipientGs, routedEnv)) {
+      if (!send(recipientGs, routedEnv, routedBytes)) {
         onClientTooSlow(recipientGs);
+      } else {
+        metrics.onBytesRouted(routedBytes.length);
       }
     }
   }
@@ -338,12 +346,13 @@ public class GhostBunkerWebSocketHandler extends BinaryWebSocketHandler {
   }
 
   private void onDisconnect(GhostSession session) {
-    heartbeatService.closeWithGoodbye(session, DisconnectReason.CLIENT_REQUEST, "client requested");
+    heartbeatService.closeWithGoodbye(session, DisconnectReason.CLIENT_REQUEST);
   }
 
   private void onClientTooSlow(GhostSession session) {
     if (session.markSlowClient()) {
-      heartbeatService.closeWithGoodbye(session, DisconnectReason.POLICY_ERROR, "client too slow");
+      metrics.onSlowClientClosed();
+      heartbeatService.closeWithGoodbye(session, DisconnectReason.POLICY_ERROR);
     }
   }
 
@@ -351,17 +360,21 @@ public class GhostBunkerWebSocketHandler extends BinaryWebSocketHandler {
     sendError(session, code, sanitized, null, null);
     int violations = session.recordProtocolViolationAndGetCountInWindow();
     if (violations >= limits.maxViolationsInWindow()) {
-      heartbeatService.closeWithGoodbye(session, DisconnectReason.TOO_MANY_VIOLATIONS, "too many violations");
+      heartbeatService.closeWithGoodbye(session, DisconnectReason.TOO_MANY_VIOLATIONS);
     }
   }
 
   private void sendError(GhostSession session, ErrorCode code, String msg, String requestId, Integer retryAfterMs) throws IOException {
     GhostEnvelope err = errorMapper.error(code, msg, requestId, retryAfterMs);
     send(session, err);
+    metrics.onErrorEmitted(code);
   }
 
   private boolean send(GhostSession session, GhostEnvelope env) throws IOException {
-    byte[] bytes = encoder.encode(env);
+    return send(session, env, encoder.encode(env));
+  }
+
+  private boolean send(GhostSession session, GhostEnvelope env, byte[] bytes) throws IOException {
     if (!outboundPolicy.canEnqueue(session, bytes.length)) {
       return false;
     }
@@ -381,6 +394,7 @@ public class GhostBunkerWebSocketHandler extends BinaryWebSocketHandler {
     sessionRegistry.get(session).ifPresent(gs -> gs.setState(GhostSessionState.CLOSED));
     roomRegistry.leaveAll(session);
     sessionRegistry.remove(session);
+    metrics.onConnectionClosed();
     logger.info("ws closed (sanitized)");
   }
 }

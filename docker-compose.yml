@@ -1,0 +1,18 @@
+# Staging-oriented compose stack for the reference server only.
+# TLS and origin policy are operator responsibilities — see docs/reverse-proxy-deployment.md.
+
+services:
+  ghost-bunker-server:
+    build: .
+    ports:
+      - "8080:8080"
+      - "8081:8081"
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      GHOSTBUNKER_WEBSOCKET_ALLOWED_ORIGINS: "http://localhost:5173,http://127.0.0.1:5173"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8081/actuator/health | grep -q UP"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s

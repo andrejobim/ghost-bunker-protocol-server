@@ -38,5 +38,9 @@ public class InMemoryRoomRegistry {
     }
     rooms.entrySet().removeIf(e -> e.getValue().isEmpty());
   }
+
+  public int activeRoomCount() {
+    return rooms.size();
+  }
 }
 

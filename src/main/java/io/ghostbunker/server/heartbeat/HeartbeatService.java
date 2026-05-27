@@ -8,6 +8,7 @@ import io.ghostbunker.protocol.v1.Goodbye;
 import io.ghostbunker.protocol.v1.MessageType;
 import io.ghostbunker.protocol.v1.Ping;
 import io.ghostbunker.server.logging.SanitizedProtocolLogger;
+import io.ghostbunker.server.observability.GhostBunkerMetrics;
 import io.ghostbunker.server.protocol.GhostEnvelopeEncoder;
 import io.ghostbunker.server.protocol.ProtocolLimits;
 import io.ghostbunker.server.session.GhostSession;
@@ -34,10 +35,16 @@ public class HeartbeatService {
   private final GhostEnvelopeEncoder encoder;
   private final SanitizedProtocolLogger logger;
   private final ProtocolLimits limits;
+  private final GhostBunkerMetrics metrics;
 
-  public HeartbeatService(SanitizedProtocolLogger logger, ProtocolLimits limits) {
+  public HeartbeatService(
+      SanitizedProtocolLogger logger,
+      ProtocolLimits limits,
+      GhostBunkerMetrics metrics
+  ) {
     this.logger = logger;
     this.limits = limits;
+    this.metrics = metrics;
     this.encoder = new GhostEnvelopeEncoder(limits);
   }
 
@@ -51,7 +58,7 @@ public class HeartbeatService {
     if (!session.wsSession().isOpen()) return;
     if (session.state() == io.ghostbunker.server.session.GhostSessionState.AWAITING_HELLO) {
       sendHandshakeTimeoutError(session);
-      closeWithGoodbye(session, DisconnectReason.PROTOCOL_ERROR, "handshake timeout");
+      closeWithGoodbye(session, DisconnectReason.PROTOCOL_ERROR);
     }
   }
 
@@ -69,6 +76,7 @@ public class HeartbeatService {
               .build())
           .build();
       session.wsSession().sendMessage(new BinaryMessage(encoder.encode(err)));
+      metrics.onErrorEmitted(ErrorCode.HANDSHAKE_TIMEOUT);
     } catch (Exception e) {
       logger.warn("handshake timeout error send failed (sanitized)");
     }
@@ -80,14 +88,14 @@ public class HeartbeatService {
 
     long idleFor = now - session.lastActivityMs();
     if (idleFor > limits.idleTimeoutMs()) {
-      closeWithGoodbye(session, DisconnectReason.IDLE_TIMEOUT, "idle timeout");
+      closeWithGoodbye(session, DisconnectReason.IDLE_TIMEOUT);
       return;
     }
 
     long lastPing = session.lastPingSentAtMs();
     long lastPong = session.lastPongAtMs();
     if (lastPing > 0 && (lastPong < lastPing) && (now - lastPing > limits.pongTimeoutMs())) {
-      closeWithGoodbye(session, DisconnectReason.PONG_TIMEOUT, "pong timeout");
+      closeWithGoodbye(session, DisconnectReason.PONG_TIMEOUT);
       return;
     }
 
@@ -114,7 +122,9 @@ public class HeartbeatService {
     }
   }
 
-  public void closeWithGoodbye(GhostSession session, DisconnectReason reason, String sanitizedMessage) {
+  public void closeWithGoodbye(GhostSession session, DisconnectReason reason) {
+    String sanitizedMessage = GoodbyeReasonMessages.canonical(reason);
+    metrics.onGoodbyeEmitted(reason);
     try {
       GhostEnvelope goodbye = GhostEnvelope.newBuilder()
           .setProtocol(limits.expectedProtocol())
@@ -124,11 +134,6 @@ public class HeartbeatService {
           .setType(MessageType.GOODBYE)
           .setGoodbye(Goodbye.newBuilder().setReason(reason).setMessage(sanitizedMessage).build())
           .build();
-      // GOODBYE is a final control frame and must reach the peer even when the
-      // ConcurrentWebSocketSessionDecorator's outbound buffer has already overflowed (slow-client
-      // backpressure). We write it directly to the underlying session so we bypass the decorator's
-      // pending-bytes / send-time check while still serializing concurrent writers through the
-      // underlying session's own internal lock.
       WebSocketSession target = session.rawWsSession();
       if (target.isOpen()) {
         synchronized (target) {
@@ -138,8 +143,6 @@ public class HeartbeatService {
     } catch (Exception ignored) {
       // best-effort
     } finally {
-      // sendMessage may return before the bytes physically hit the wire. A short delayed close
-      // makes GOODBYE delivery deterministic.
       scheduler.schedule(() -> safeClose(session, CloseStatus.NORMAL), 50, TimeUnit.MILLISECONDS);
     }
   }
@@ -152,4 +155,3 @@ public class HeartbeatService {
     }
   }
 }
-

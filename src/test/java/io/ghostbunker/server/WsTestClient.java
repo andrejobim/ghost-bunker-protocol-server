@@ -1,12 +1,12 @@
 package io.ghostbunker.server;
 
 import org.springframework.web.socket.BinaryMessage;
+import org.springframework.web.socket.CloseStatus;
 import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketHttpHeaders;
 import org.springframework.web.socket.WebSocketSession;
 import org.springframework.web.socket.client.WebSocketClient;
 import org.springframework.web.socket.client.standard.StandardWebSocketClient;
-import org.springframework.web.socket.CloseStatus;
 import org.springframework.web.socket.handler.AbstractWebSocketHandler;
 
 import java.net.URI;
@@ -24,14 +24,24 @@ final class WsTestClient {
   private final CompletableFuture<CloseStatus> closeFuture = new CompletableFuture<>();
   private final boolean autoPong;
   private final long inboundDelayMs;
+  private final WebSocketHttpHeaders handshakeHeaders;
 
   WsTestClient() {
-    this(false, 0);
+    this(false, 0, null);
   }
 
   WsTestClient(boolean autoPong, long inboundDelayMs) {
+    this(autoPong, inboundDelayMs, null);
+  }
+
+  WsTestClient(WebSocketHttpHeaders handshakeHeaders) {
+    this(false, 0, handshakeHeaders);
+  }
+
+  WsTestClient(boolean autoPong, long inboundDelayMs, WebSocketHttpHeaders handshakeHeaders) {
     this.autoPong = autoPong;
     this.inboundDelayMs = inboundDelayMs;
+    this.handshakeHeaders = handshakeHeaders != null ? handshakeHeaders : new WebSocketHttpHeaders();
   }
 
   public WebSocketSession connect(String url) throws Exception {
@@ -51,7 +61,8 @@ final class WsTestClient {
         if (inboundDelayMs > 0) {
           try {
             Thread.sleep(inboundDelayMs);
-          } catch (InterruptedException ignored) {}
+          } catch (InterruptedException ignored) {
+          }
         }
 
         if (autoPong) {
@@ -68,7 +79,7 @@ final class WsTestClient {
       public void afterConnectionClosed(WebSocketSession session, CloseStatus status) {
         closeFuture.complete(status);
       }
-    }, new WebSocketHttpHeaders(), URI.create(url));
+    }, handshakeHeaders, URI.create(url));
 
     return sessionFuture.get(3, TimeUnit.SECONDS);
   }
@@ -104,4 +115,3 @@ final class WsTestClient {
     }
   }
 }
-

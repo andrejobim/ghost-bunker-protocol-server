@@ -2,12 +2,72 @@ package io.ghostbunker.server.config;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
+import java.util.ArrayList;
+import java.util.List;
+
 @ConfigurationProperties(prefix = "ghostbunker")
 public class GhostBunkerProperties {
   private final Limits limits = new Limits();
+  private final WebSocket websocket = new WebSocket();
+  private final Shutdown shutdown = new Shutdown();
 
   public Limits getLimits() {
     return limits;
+  }
+
+  public WebSocket getWebsocket() {
+    return websocket;
+  }
+
+  public Shutdown getShutdown() {
+    return shutdown;
+  }
+
+  public static class WebSocket {
+    /**
+     * Origins permitted for the WebSocket handshake ({@code Origin} header). Use {@code *}
+     * only for local development. Staging/production should list explicit HTTPS origins.
+     */
+    private List<String> allowedOrigins = new ArrayList<>(List.of("*"));
+
+    /**
+     * When non-blank, the handshake must request this RFC 6455 subprotocol
+     * ({@code Sec-WebSocket-Protocol}), e.g. {@code ghost-bunker.v0.1}.
+     */
+    private String requiredSubprotocol = "";
+
+    public List<String> getAllowedOrigins() {
+      return allowedOrigins;
+    }
+
+    public void setAllowedOrigins(List<String> allowedOrigins) {
+      this.allowedOrigins = allowedOrigins != null ? new ArrayList<>(allowedOrigins) : new ArrayList<>();
+    }
+
+    public String getRequiredSubprotocol() {
+      return requiredSubprotocol;
+    }
+
+    public void setRequiredSubprotocol(String requiredSubprotocol) {
+      this.requiredSubprotocol = requiredSubprotocol != null ? requiredSubprotocol : "";
+    }
+
+    public boolean enforcesSubprotocol() {
+      return requiredSubprotocol != null && !requiredSubprotocol.isBlank();
+    }
+  }
+
+  public static class Shutdown {
+    /** Grace period (ms) after broadcasting SERVER_SHUTDOWN before the JVM exits. */
+    private int gracePeriodMs = 2_000;
+
+    public int getGracePeriodMs() {
+      return gracePeriodMs;
+    }
+
+    public void setGracePeriodMs(int gracePeriodMs) {
+      this.gracePeriodMs = gracePeriodMs;
+    }
   }
 
   public static class Limits {

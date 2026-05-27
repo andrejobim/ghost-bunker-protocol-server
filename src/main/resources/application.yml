@@ -27,3 +27,25 @@ logging:
     org.springframework.web: WARN
     org.springframework.web.socket: WARN
 
+ghostbunker:
+  websocket:
+    # Development default: allow any Origin. Staging/production must override via profile or env.
+    allowed-origins:
+      - "*"
+    # Blank = do not enforce Sec-WebSocket-Protocol. Set to ghost-bunker.v0.1 in prod profile.
+    required-subprotocol: ""
+  shutdown:
+    grace-period-ms: 2000
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,prometheus
+  metrics:
+    enable:
+      http: false
+      tomcat: false
+    tags:
+      application: ghost-bunker-protocol-server
+

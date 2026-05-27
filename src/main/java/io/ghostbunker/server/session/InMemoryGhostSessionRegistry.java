@@ -56,5 +56,14 @@ public class InMemoryGhostSessionRegistry {
   public void remove(WebSocketSession wsSession) {
     sessionsByWsId.remove(wsSession.getId());
   }
+
+  /** Immutable snapshot of live sessions (for graceful shutdown). */
+  public java.util.Collection<GhostSession> snapshot() {
+    return java.util.List.copyOf(sessionsByWsId.values());
+  }
+
+  public int activeCount() {
+    return sessionsByWsId.size();
+  }
 }
 

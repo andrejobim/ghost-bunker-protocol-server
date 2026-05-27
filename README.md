@@ -102,9 +102,28 @@ mvn spring-boot:run
 By default the server listens on `ws://localhost:8080/ghost-bunker`. The port is set in
 `src/main/resources/application.yml` (`server.port=8080`).
 
-Allowed origins on the WebSocket endpoint are currently `*` (set in
-`WebSocketConfig`). This is appropriate for local development and not for production
-deployments; see the Production Readiness Plan.
+Allowed origins are configurable via `ghostbunker.websocket.allowed-origins` (default
+`*` in `application.yml`). For staging, use the `prod` profile and set explicit HTTPS
+origins — see [`docs/reverse-proxy-deployment.md`](docs/reverse-proxy-deployment.md).
+
+### Staging (Docker)
+
+```bash
+docker compose up --build
+```
+
+Activate `SPRING_PROFILES_ACTIVE=prod`, set `GHOSTBUNKER_WEBSOCKET_ALLOWED_ORIGINS`, and
+terminate TLS at a reverse proxy. Metrics scrape: `http://127.0.0.1:8081/actuator/prometheus`.
+
+Load smoke test (Protobuf clients, server must be running):
+
+```bash
+mvn -q -DskipTests package
+java -cp "target/ghost-bunker-protocol-server-0.3.0-SNAPSHOT.jar;target/test-classes" \
+  io.ghostbunker.server.load.GhostBunkerLoadSimulator ws://localhost:8080/ghost-bunker 20 30
+```
+
+Release notes: [`docs/releases/v0.3.0-alpha.md`](docs/releases/v0.3.0-alpha.md).
 
 ---
 
@@ -121,12 +140,14 @@ The test suite contains:
     `org.springframework.web`, and `org.springframework.web.socket` resolve to an
     effective Logback level at least as restrictive as WARN, and
     `server.tomcat.accesslog.enabled` is exactly `false`.
-- Three integration tests (Failsafe, `*IT.java`):
+- Four integration test classes (Failsafe, `*IT.java`):
   - `GhostBunkerWebSocketIT` — full HELLO/JOIN/SEND flow, version negotiation,
     envelope validation, ciphertext size limit, too-many-rooms, send-before-join,
     handshake timeout, invalid Protobuf, repeated violations leading to disconnect.
   - `HeartbeatIT` — verifies that the server emits `PING` and that the connection
     stays open while heartbeats are exchanged.
+  - `ProductionHardeningIT` — subprotocol enforcement, graceful `SERVER_SHUTDOWN`
+    GOODBYE, and metrics tag privacy.
   - `PrivacyLogAuditIT` — runs the full HELLO/JOIN/SEND flow against a real Spring
     Boot WebSocket server with a Logback `ListAppender` attached at `TRACE` level
     to the `io.ghostbunker` logger (the application's own packages, not the root

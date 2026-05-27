@@ -14,16 +14,26 @@ import org.springframework.web.socket.server.standard.ServletServerContainerFact
 public class WebSocketConfig implements WebSocketConfigurer {
   private final GhostBunkerWebSocketHandler handler;
   private final ProtocolLimits limits;
+  private final GhostBunkerProperties properties;
 
-  public WebSocketConfig(GhostBunkerWebSocketHandler handler, ProtocolLimits limits) {
+  public WebSocketConfig(
+      GhostBunkerWebSocketHandler handler,
+      ProtocolLimits limits,
+      GhostBunkerProperties properties
+  ) {
     this.handler = handler;
     this.limits = limits;
+    this.properties = properties;
   }
 
   @Override
   public void registerWebSocketHandlers(WebSocketHandlerRegistry registry) {
-    registry.addHandler(handler, "/ghost-bunker")
-        .setAllowedOrigins("*");
+    String[] origins = properties.getWebsocket().getAllowedOrigins().toArray(String[]::new);
+    var registration = registry.addHandler(handler, "/ghost-bunker")
+        .setAllowedOrigins(origins);
+    if (properties.getWebsocket().enforcesSubprotocol()) {
+      registration.addInterceptors(new SubprotocolHandshakeInterceptor(properties));
+    }
   }
 
   /**
@@ -38,12 +48,9 @@ public class WebSocketConfig implements WebSocketConfigurer {
   @Bean
   public ServletServerContainerFactoryBean createWebSocketContainer() {
     ServletServerContainerFactoryBean container = new ServletServerContainerFactoryBean();
-    // Allow frames up to envelope limit + headroom; the application layer enforces the strict
-    // protocol envelope limit and answers with a protocol-level ERROR before closing.
     int containerBufferBytes = limits.maxEnvelopeBytes() + 16 * 1024;
     container.setMaxBinaryMessageBufferSize(containerBufferBytes);
-    container.setMaxTextMessageBufferSize(1024); // we don't use text frames; keep small
+    container.setMaxTextMessageBufferSize(1024);
     return container;
   }
 }
-
