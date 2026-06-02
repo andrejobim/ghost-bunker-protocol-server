@@ -18,11 +18,11 @@ import java.util.concurrent.atomic.AtomicLong;
  */
 @Component
 public class GhostBunkerMetrics {
-  private final Counter connectionsOpened;
-  private final Counter connectionsClosed;
   private final AtomicLong activeConnections = new AtomicLong();
-  private final Counter bytesRouted;
+  private final Counter routedMessages;
   private final Counter slowClientCloses;
+  private final Counter rateLimitRejections;
+  private final Counter heartbeatTimeouts;
   private final Map<ErrorCode, Counter> errorsByCode;
   private final Map<DisconnectReason, Counter> goodbyeByReason;
   private final RoomRegistry roomRegistry;
@@ -33,20 +33,20 @@ public class GhostBunkerMetrics {
   ) {
     this.roomRegistry = roomRegistry;
 
-    connectionsOpened = Counter.builder("ghostbunker.connections.opened")
-        .description("Total WebSocket connections accepted")
-        .register(registry);
-    connectionsClosed = Counter.builder("ghostbunker.connections.closed")
-        .description("Total WebSocket connections closed")
-        .register(registry);
     Gauge.builder("ghostbunker.connections.active", activeConnections, AtomicLong::get)
         .description("Currently open WebSocket connections")
         .register(registry);
-    bytesRouted = Counter.builder("ghostbunker.bytes.routed")
-        .description("Total ciphertext envelope bytes fan-out to peers")
+    routedMessages = Counter.builder("ghostbunker.messages.routed")
+        .description("Total ENCRYPTED_MESSAGE fan-out deliveries to peers (aggregate)")
         .register(registry);
     slowClientCloses = Counter.builder("ghostbunker.connections.slow_client_closed")
         .description("Connections closed because outbound backpressure was exceeded")
+        .register(registry);
+    rateLimitRejections = Counter.builder("ghostbunker.rate_limit.rejections")
+        .description("Commands/messages rejected due to per-connection rate limits (aggregate)")
+        .register(registry);
+    heartbeatTimeouts = Counter.builder("ghostbunker.heartbeat.timeouts")
+        .description("Connections closed due to heartbeat timeout (aggregate)")
         .register(registry);
     Gauge.builder("ghostbunker.rooms.active", roomRegistry, RoomRegistry::activeRoomCount)
         .description("Rooms with at least one connected participant")
@@ -76,19 +76,15 @@ public class GhostBunkerMetrics {
   }
 
   public void onConnectionOpened() {
-    connectionsOpened.increment();
     activeConnections.incrementAndGet();
   }
 
   public void onConnectionClosed() {
-    connectionsClosed.increment();
     activeConnections.updateAndGet(v -> Math.max(0, v - 1));
   }
 
-  public void onBytesRouted(long bytes) {
-    if (bytes > 0) {
-      bytesRouted.increment(bytes);
-    }
+  public void onMessageRouted() {
+    routedMessages.increment();
   }
 
   public void onErrorEmitted(ErrorCode code) {
@@ -107,6 +103,14 @@ public class GhostBunkerMetrics {
 
   public void onSlowClientClosed() {
     slowClientCloses.increment();
+  }
+
+  public void onRateLimitRejected() {
+    rateLimitRejections.increment();
+  }
+
+  public void onHeartbeatTimeout() {
+    heartbeatTimeouts.increment();
   }
 
   /** Exposed for tests verifying gauge wiring. */

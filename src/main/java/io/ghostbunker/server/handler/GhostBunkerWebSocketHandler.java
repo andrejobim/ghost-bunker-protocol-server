@@ -118,6 +118,7 @@ public class GhostBunkerWebSocketHandler extends BinaryWebSocketHandler {
     session.touchActivity();
 
     if (!rateLimitStore.allowCommand(session)) {
+      metrics.onRateLimitRejected();
       sendError(session, ErrorCode.RATE_LIMITED_CONNECTION, "rate limited", null, 1_000);
       return;
     }
@@ -276,6 +277,7 @@ public class GhostBunkerWebSocketHandler extends BinaryWebSocketHandler {
     }
 
     if (!rateLimitStore.allowMessage(session)) {
+      metrics.onRateLimitRejected();
       sendError(session, ErrorCode.RATE_LIMITED_CONNECTION, "rate limited", env.getRequestId(), 1_000);
       return;
     }
@@ -338,7 +340,7 @@ public class GhostBunkerWebSocketHandler extends BinaryWebSocketHandler {
       if (!send(recipientGs, routedEnv, routedBytes)) {
         onClientTooSlow(recipientGs);
       } else {
-        metrics.onBytesRouted(routedBytes.length);
+        metrics.onMessageRouted();
       }
     }
   }

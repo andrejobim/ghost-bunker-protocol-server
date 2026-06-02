@@ -95,6 +95,7 @@ public class HeartbeatService {
     long lastPing = session.lastPingSentAtMs();
     long lastPong = session.lastPongAtMs();
     if (lastPing > 0 && (lastPong < lastPing) && (now - lastPing > limits.pongTimeoutMs())) {
+      metrics.onHeartbeatTimeout();
       closeWithGoodbye(session, DisconnectReason.PONG_TIMEOUT);
       return;
     }

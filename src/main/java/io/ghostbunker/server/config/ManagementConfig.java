@@ -17,7 +17,28 @@ import java.util.Set;
 public class ManagementConfig {
 
   private static final Set<String> FORBIDDEN_TAG_KEYS = Set.of(
-      "ip", "session_id", "user_id", "room_id", "nickname"
+      "ip",
+      "remote_address",
+      "remoteaddress",
+      "address",
+      "remote_addr",
+      "remoteaddr",
+      "user_id",
+      "userid",
+      "session_id",
+      "sessionid",
+      "room_id",
+      "roomid",
+      "nickname",
+      "key_id",
+      "keyid",
+      "message_id",
+      "messageid",
+      "request_id",
+      "requestid",
+      "ciphertext",
+      "payload_size",
+      "payloadsize"
   );
 
   @Bean
